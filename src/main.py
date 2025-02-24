@@ -15,11 +15,10 @@ def vectorize(corpus, dataset_columns):
     rs = dict()
     for col in dataset_columns:
         vectorizer = CountVectorizer()
-        result = vectorizer.fit_transform(corpus[col])
-        rs[col] = result.toarray()
+        vector_value = vectorizer.fit_transform(corpus[col])
+        rs[col] = vector_value.toarray()
 
-        print(rs )
-    return rs
+    return pd.DataFrame(*rs)
 
 
 corpus = vectorize(df, dataset_columns)
