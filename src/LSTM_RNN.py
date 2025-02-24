@@ -16,7 +16,6 @@ def read_cipher_text(file_path):
 cipher_texts, labels_text = read_cipher_text('PLAYFAIR_CIPHER_DATASET.xlsx')
 
 print(cipher_texts.shape, labels_text.shape)
-
 tokenizer = Tokenizer(char_level=True)
 tokenizer.fit_on_texts(cipher_texts)
 cipher_texts_tokenized = tokenizer.texts_to_sequences(cipher_texts)
