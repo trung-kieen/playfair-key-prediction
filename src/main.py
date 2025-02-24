@@ -56,11 +56,12 @@ def rnn_machine_translate_model(src_seq_len, tar_seq_len, n_units):
         # # RepeatVector(...),
         # LSTM(..., return_sequences=True),
         # TimeDistributed(Dense(11, activation = "")),
-        LSTM(100, input_shape=(40, 1), activation ="softmax"),
+        LSTM(128, input_shape=(40, 1), activation ="relu"),
         RepeatVector(8),
         # LSTM(100, activation ="sigmoid", return_sequences = True),
         # LSTM(100, activation ="sigmoid", return_sequences = True),
-        LSTM(50, return_sequences=True, activation ="softmax"),
+        LSTM(64, return_sequences=True, activation ="sigmoid"),
+        LSTM(64, return_sequences=True, activation ="softmax"),
         TimeDistributed(Dense(1, activation='relu'))
     ])
 
@@ -101,11 +102,13 @@ def main():
     N_UNITS = 256
     model = rnn_machine_translate_model( MAX_DECRYPT_SEQUENCES_LEN, MAX_KEY_SEQUENCES_LEN, N_UNITS)
     print(model.summary())
-    model.compile(optimizer = "adam", loss = "categorical_crossentropy")
-    model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), verbose=2)
-    # saved_model= 'model.h5'
+    model.compile(optimizer = "adam", loss = "binary_crossentropy")
+    # model.compile(optimizer = "adam", loss = "binary_crossentropy")
+    # model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), verbose=2)
+    saved_model= 'model.h5'
     # checkpoint = ModelCheckpoint(saved_model, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-    # model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), callbacks=[checkpoint], verbose=2)
+    model.fit(X_train, y_train, epochs=5, batch_size=32, validation_data=(X_test, y_test), verbose=2)
+    # model.fit(X_train, y_train, epochs=20, batch_size=64, validation_data=(X_test, y_test), callbacks=[checkpoint], verbose=2)
     # plot_model(model, to_file='model.png', show_shapes=True)
 
 
