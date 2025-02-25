@@ -12,8 +12,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, Dropout, Embedding, RepeatVector, TimeDistributed, Input
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Dense, LSTM, Dropout, Embedding, RepeatVector, TimeDistributed, Input, Activation, Lambda
 from keras.callbacks import ModelCheckpoint
 
 SIZE = 10000
@@ -52,44 +52,30 @@ def rnn_machine_translate_model(src_seq_len, tar_seq_len, n_units):
     sequence_length = 40  # Number of words in each input sequence
     lstm_units = 256  # Number of LSTM cells
 
-    model = Sequential([
-        Input(shape = (sequence_length, 1)),
-        # Convert word indices into dense vectors
-        # LSTM(32, input_shape=(40 , 1 )), # 40 vector of 1 features
-        # # RepeatVector(...),
-        # LSTM(..., return_sequences=True),
-        # TimeDistributed(Dense(11, activation = "")),
-        LSTM(128, input_shape=(MAX_DECRYPT_SEQUENCES_LEN, 1),
-             activation = "relu"
-             ),
-        RepeatVector(8),
-        LSTM(100, activation ="relu", return_sequences = True),
-        # LSTM(100, activation ="sigmoid", return_sequences = True),
-        LSTM(64, return_sequences=True,
-             # activation = "softmax"
-             ),
-        # LSTM(64, return_sequences=True,
-        #      activation = "softmax"
-        #      ),
-        Dense(128, activation="relu"),
-        Dropout(0.5),
+    vocab_size = 10000  # Estimated vocabulary size
+    embedding_dim = 128  # Size of word embeddings
+    sequence_length = 40  # Number of words in each input sequence
+    lstm_units = 256  # Number of LSTM cells
 
-    # Add an output layer with output units for all 10 digits
-        Dense(10, activation="softmax"),
+    inputs = Input(name='inputs',shape=[src_seq_len])
+    layer = Embedding(vocab_size, 1 ,input_length=src_seq_len)(inputs)
+    layer = LSTM(1, input_shape=(src_seq_len, 1))(layer)
+    layer = Dense(256,name='FC1')(layer)
+    layer = Activation('relu')(layer)
+    layer = Dropout(0.2)(layer)
+    layer = Dense(tar_seq_len,name='out_layer'  )(layer)
 
-        # LSTM(64, return_sequences=True,
-        #      activation = "softmax"
-        #      ),
-        TimeDistributed(1, Dense(1,
-                              activation="relu"
-                              ))
-    ])
-
+    # This layer result an interger
+    layer = Activation('sigmoid')(layer)
+    # layer = Activation('relu')(layer)
+    layer = Dense(tar_seq_len)(layer)
+    # layer = Dense(tar_seq_len,activation = "relu")(layer)
+    model = Model(inputs=inputs,outputs=layer)
 
 
     return model
 
-def dim_adjust(lst):
+def tensor_dim(lst):
     """
     Array to 3D for dim as numpy
     """
@@ -99,11 +85,26 @@ def dim_adjust(lst):
 
 def evaluate(model, X_test, y_test, tokenizer):
     predictions = model.predict(X_test, batch_size=64, verbose=0)
+     predictions = tensor_to_2d_and_round(predictions)
     for predict, actual in zip(predictions[:2], y_test[:2]):
-        print("Predict" )
+        print("Predict vector" )
         print(predict)
-        print("Actual value is")
+        print("Actual vector is")
         print(actual)
+        try:
+            print("Predict value" )
+            print(tokenizer.texts_to_sequences(predict))
+            print("Actual value is")
+            print(tokenizer.texts_to_sequences(actual))
+        except:
+            pass
+
+def tensor_to_2d_and_round(n):
+    # Reduct dim
+    n = np.squeeze(n, axis=2)
+    n = np.round(n)
+    return n
+
 
 def tensor_dim_normalize(lst):
     """
@@ -136,10 +137,13 @@ def main():
     print(feature_padded.shape)
     X_train, X_test, y_train, y_test = train_test_split(feature_padded, labels_padded, test_size=0.2, random_state=42)
     N_UNITS = 256
-    model = rnn_machine_translate_model( MAX_DECRYPT_SEQUENCES_LEN, MAX_KEY_SEQUENCES_LEN, N_UNITS)
+    model = rnn_machine_translate_model( src_seq_len = MAX_DECRYPT_SEQUENCES_LEN, tar_seq_len = MAX_KEY_SEQUENCES_LEN, n_units = N_UNITS)
     print(model.summary())
     # model.compile(optimizer = "adam", loss = "categorical_crossentropy", metrics = ["accuracy"])
-    model.compile(optimizer = "adam", loss = "binary_crossentropy")
+    model.compile(optimizer = 'rmsprop',loss =  'mse', metrics = ["accuracy"])
+    # model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
+
+
     # model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), verbose=2)
     # saved_model= 'model.h5'
     # checkpoint = ModelCheckpoint(saved_model, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
