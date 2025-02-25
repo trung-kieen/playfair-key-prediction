@@ -1,9 +1,7 @@
-import numpy as np
-
 import pandas as pd
-from pandas.core.internals.blocks import NumpyBlock
 import tensorflow
 
+import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -16,6 +14,7 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Dropout, Embedding, RepeatVector, TimeDistributed, Input, Activation, Lambda
 from keras.callbacks import ModelCheckpoint
 
+ONE_HOT_SIZE= 50 # Max size of number by one hot encoder
 SIZE = 10000
 TRAIN_SIZE = 10000 * 0.8
 TEST_SIZE = 10000 * 0.8
@@ -59,6 +58,7 @@ def rnn_machine_translate_model(src_seq_len, tar_seq_len, n_units):
 
     inputs = Input(name='inputs',shape=[src_seq_len])
     layer = Embedding(vocab_size, 1 ,input_length=src_seq_len)(inputs)
+    layer = LSTM(1, input_shape=(src_seq_len, 1), return_sequences = True)(layer)
     layer = LSTM(1, input_shape=(src_seq_len, 1))(layer)
     layer = Dense(256,name='FC1')(layer)
     layer = Activation('relu')(layer)
@@ -72,32 +72,68 @@ def rnn_machine_translate_model(src_seq_len, tar_seq_len, n_units):
     # layer = Dense(tar_seq_len,activation = "relu")(layer)
     model = Model(inputs=inputs,outputs=layer)
 
+    model.compile(optimizer = 'rmsprop',loss =  'mse', metrics = ["accuracy"])
 
     return model
 
-def tensor_dim(lst):
-    """
-    Array to 3D for dim as numpy
-    """
-    n = np.array(lst)
-    return np.expand_dims(n, axis = 2)
+def one_hot_encode(sequence, n_unique):
+	encoding = list()
+	for value in sequence:
+		vector = [0 for _ in range(n_unique)]
+		vector[value] = 1
+		encoding.append(vector)
+	return np.array(encoding)
 
+# decode a one hot encoded string
+def one_hot_decode(encoded_seq):
+	return [np.argmax(vector) for vector in encoded_seq]
+
+# def tensor_dim(lst):
+#     """
+#     Array to 3D for dim as numpy
+#     """
+#     return one_hot_encode(lst, ONE_HOT_SIZE)
+    # n = np.array(lst)
+    # return np.expand_dims(n, axis = 2)
+
+def key_seq_normalization(seq):
+    """
+    Assume prediction value will have shape (None, 8)
+    Normalize to (None, 8, 1), round floating point convert to int
+    Prediction will not follow original style, we need to add more demension to decode
+    """
+    seq = np.expand_dims(seq, axis = 2)
+    normal = np.abs(np.round(seq)).astype(np.int64)
+    return normal
+
+def decode_seq(seq, tokenizer):
+    """
+    Assume input shape is (8, 1) from one vector
+    Recontructure origin text base on input seq vector
+    """
+    return "".join(tokenizer.sequences_to_texts(seq)).strip()
 
 def evaluate(model, X_test, y_test, tokenizer):
     predictions = model.predict(X_test, batch_size=64, verbose=0)
-     predictions = tensor_to_2d_and_round(predictions)
-    for predict, actual in zip(predictions[:2], y_test[:2]):
-        print("Predict vector" )
-        print(predict)
-        print("Actual vector is")
-        print(actual)
-        try:
-            print("Predict value" )
-            print(tokenizer.texts_to_sequences(predict))
-            print("Actual value is")
-            print(tokenizer.texts_to_sequences(actual))
-        except:
-            pass
+    print(predictions)
+    print(predictions.shape)
+    predictions = key_seq_normalization(predictions)
+
+    data = dict()
+    data["predict"] = []
+    data["actual"] = []
+
+    # predictions = tensor_to_2d_and_round(predictions)
+    for predict, actual in zip(predictions, y_test):
+        predict = decode_seq(predict, tokenizer)
+        actual = decode_seq(actual, tokenizer)
+        data["predict"].append(predict)
+        data["actual"].append(actual)
+    # Save in file
+    df = pd.DataFrame(data)
+    df.to_csv("result.csv")
+    print(df)
+
 
 def tensor_to_2d_and_round(n):
     # Reduct dim
@@ -106,11 +142,13 @@ def tensor_to_2d_and_round(n):
     return n
 
 
-def tensor_dim_normalize(lst):
+def tensor_dim_normalize(seq):
     """
     LSTM require to work with dim is 3 instead of 2
     """
-    n = np.array(lst)
+    # return one_hot_encode(lst, ONE_HOT_SIZE)
+    n = np.array(seq)
+    # n_tensor = n.reshape(1, seq.shape[0], seq.shape[1])
     n_tensor = np.expand_dims(n, axis = 2)
     return n_tensor
 def main():
@@ -133,23 +171,13 @@ def main():
 
     feature_padded = tensor_dim_normalize(feature_padded)
     labels_padded = tensor_dim_normalize(labels_padded)
-    print(feature_padded)
-    print(feature_padded.shape)
     X_train, X_test, y_train, y_test = train_test_split(feature_padded, labels_padded, test_size=0.2, random_state=42)
     N_UNITS = 256
     model = rnn_machine_translate_model( src_seq_len = MAX_DECRYPT_SEQUENCES_LEN, tar_seq_len = MAX_KEY_SEQUENCES_LEN, n_units = N_UNITS)
     print(model.summary())
-    # model.compile(optimizer = "adam", loss = "categorical_crossentropy", metrics = ["accuracy"])
-    model.compile(optimizer = 'rmsprop',loss =  'mse', metrics = ["accuracy"])
-    # model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
 
 
-    # model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), verbose=2)
-    # saved_model= 'model.h5'
-    # checkpoint = ModelCheckpoint(saved_model, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
     model.fit(X_train, y_train, epochs=5, batch_size=40, validation_data=(X_test, y_test), verbose=2)
-    # model.fit(X_train, y_train, epochs=20, batch_size=64, validation_data=(X_test, y_test), callbacks=[checkpoint], verbose=2)
-    # plot_model(model, to_file='model.png', show_shapes=True)
 
 
     evaluate(model, X_test, y_test, label_tokenizer)
