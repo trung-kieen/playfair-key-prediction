@@ -11,11 +11,10 @@ import json
 
 def read_cipher_text(file_path):
     df = pd.read_excel(file_path)
-    return df['Plain Text'], df['Cipher Text']
+    return df['Plain Text'], df['Decrypted Text']
 
 cipher_texts, labels_text = read_cipher_text('PLAYFAIR_CIPHER_DATASET.xlsx')
 
-print(cipher_texts.shape, labels_text.shape)
 tokenizer = Tokenizer(char_level=True)
 tokenizer.fit_on_texts(cipher_texts)
 cipher_texts_tokenized = tokenizer.texts_to_sequences(cipher_texts)
@@ -39,11 +38,9 @@ for i in [True, True, False]:
     rnn.add(Dropout(0.2))
 
 num_unique_labels = len(label_encoder.classes_)
-
 rnn.add(Dense(units=num_unique_labels, activation='softmax'))
 
-# rnn.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-rnn.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
+rnn.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 history = rnn.fit(x_train, y_train, epochs=2, batch_size=32, validation_data=(x_test, y_test))
 
