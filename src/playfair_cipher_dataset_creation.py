@@ -4,6 +4,7 @@ import nltk
 nltk.download('words')
 from nltk.corpus import words
 
+NUM_PLAINTEXTS = 30000
 def create_matrix(key):
     """
     Create 5x5 matrix from key
@@ -117,7 +118,7 @@ def generate_plaintexts(num_plaintexts):
 
 
 
-def generate_keys(thres_hold = 100):
+def generate_keys(thres_hold = 10):
     """
     Generate plain text sample
     """
@@ -127,8 +128,7 @@ def generate_keys(thres_hold = 100):
             yield word[:5].upper()
 
 if __name__ == '__main__':
-    num_plaintexts = 10000
-    plaintexts = generate_plaintexts(num_plaintexts)
+    plaintexts = generate_plaintexts(NUM_PLAINTEXTS)
     keys  = list(generate_keys())
     # key = 'SECRET'
     data = {'Plain Text': [], 'Key':[], 'Cipher Text': [], 'Decrypted Text': []}
@@ -144,4 +144,4 @@ if __name__ == '__main__':
         print(plaintext)
     df = pd.DataFrame(data)
     # df.to_excel('PLAYFAIR_CIPHER_DATASET.xlsx', index=False)
-    df.to_excel('PLAYFAIR_CIPHER_DATASET_RANDOM_KEY.xlsx', index=False)
+    df.to_excel(f'PLAYFAIR_CIPHER_DATASET_RANDOM_KEY_{NUM_PLAINTEXTS}.xlsx', index=False)

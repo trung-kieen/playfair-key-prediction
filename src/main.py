@@ -7,11 +7,12 @@ import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+# from tensorflow.keras import optimizers
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-
+from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Dropout, Embedding, RepeatVector, TimeDistributed, Input, Activation, Lambda
 from keras.callbacks import ModelCheckpoint
@@ -33,19 +34,22 @@ fitting	SECRET	BLCZEMUA	FITTING
 
 
 EPORCHS = 5
-LSTM_N_UNITS = 32
+LSTM_N_UNITS = 512
 SIZE = 10000
 TRAIN_SIZE = 10000 * 0.8
 TEST_SIZE = 10000 * 0.8
-MAX_DECRYPT_SEQUENCES_LEN = 26
-MAX_KEY_SEQUENCES_LEN = 26
+
+
+# Maximize number of token in each vector
+# => Convention fix in 40 character for input and 8 character for key
+MAX_DECRYPT_SEQUENCES_LEN = 40 # Number of word, character to decrypt word
+MAX_KEY_SEQUENCES_LEN = 8
 # MAX_KEY_SEQUENCES_LEN = 40
 
 
 def load_data(filename , feature_cols, label_col: str):
     df = pd.read_excel(filename)
     return df[feature_cols], df[label_col]
-
 
 
 def tokenize_normalize(tokenizer, maxlen, corpus):
@@ -68,42 +72,19 @@ def tokenize_normalize(tokenizer, maxlen, corpus):
 def decoder_off_set(decoder_input_data, offset):
     decoder_target_data = np.zeros_like(decoder_input_data)
     # Shift decoder_input_data by 'offset' to get decoder_target_data
-    decoder_target_data[:, :-offset, :] = decoder_target_data[:, offset:, :]
+    decoder_target_data[:, :-offset, :] = decoder_input_data[:, offset:, :]
     return decoder_target_data
 
 
-def rnn_machine_translate_model(src_seq_len, tar_seq_len, n_units, n_features):
-    # Define an input sequence and process it.
+def rnn_machine_translate_model(input_vocab, output_vocab, input_timesteps, output_timesteps, n_units, n_features):
+    model = Sequential()
+    model.add(Embedding(input_vocab, n_units, input_length=input_timesteps, mask_zero=True))
+    model.add(LSTM(n_units))
+    model.add(RepeatVector(output_timesteps))
+    model.add(LSTM(n_units, return_sequences=True))
+    model.add(Dense(output_vocab, activation='softmax'))
+    model.compile(optimizer="rmsprop", loss='sparse_categorical_crossentropy')
 
-    num_encoder_tokens=src_seq_len
-    num_decoder_tokens=tar_seq_len
-    latent_dim = n_units
-
-
-    encoder_inputs = Input(shape=(None, num_encoder_tokens))
-    encoder = LSTM(latent_dim, return_state=True)
-    encoder_outputs, state_h, state_c = encoder(encoder_inputs)
-    # We discard `encoder_outputs` and only keep the states.
-    encoder_states = [state_h, state_c]
-
-    # Set up the decoder, using `encoder_states` as initial state.
-    decoder_inputs = Input(shape=(None, num_decoder_tokens))
-    # We set up our decoder to return full output sequences,
-    # and to return internal states as well. We don't use the
-    # return states in the training model, but we will use them in inference.
-    decoder_lstm = LSTM(latent_dim, return_sequences=True, return_state=True)
-    decoder_outputs, _, _ = decoder_lstm(decoder_inputs,
-                                         initial_state=encoder_states)
-    decoder_dense = Dense(num_decoder_tokens, activation='softmax')
-    decoder_outputs = decoder_dense(decoder_outputs)
-
-    # Require to input encoder input and decoder input to model
-    model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
-
-    print(model.summary())
-
-    model.compile(optimizer='rmsprop', loss='categorical_crossentropy',
-              metrics=['accuracy'])
     return model
 
 def one_hot_encode(matrix, n_unique):
@@ -131,10 +112,11 @@ def tensor_post_proccess(tensor):
     Prediction will not follow original style, we need to add more demension to decode
     """
     # seq = np.expand_dims(seq, axis = 2)
-    normal_tensor = np.abs(np.round(tensor)).astype(np.int16)
-    matrix = one_hot_decode(normal_tensor)
+    normal_tensor = np.argmax(tensor, axis=-1)
+    # matrix = one_hot_decode(normal_tensor)
 
-    return matrix
+
+    return normal_tensor
 
 
 def decode_seq(matrix, tokenizer):
@@ -149,12 +131,13 @@ def evaluate(model, X_test, y_test, tokenizer):
     print(predictions)
     print(predictions.shape)
     predictions = tensor_post_proccess(predictions)
-    targets = tensor_post_proccess(y_test)
+    # targets = tensor_post_proccess(y_test)
 
+    targets = y_test
 
     # Reverser tokenizer and remove whitespace
-    predictions = [word.replace(" ", "") for word in  tokenizer.sequences_to_texts(predictions)]
-    targets= [word.replace(" ", "") for word in  tokenizer.sequences_to_texts(targets)]
+    predictions = detokenizer(predictions, tokenizer)
+    targets= detokenizer(y_test ,tokenizer )
     data = dict()
     data["predict"] = predictions
     data["actual"] = targets
@@ -169,6 +152,8 @@ def evaluate(model, X_test, y_test, tokenizer):
     df = pd.DataFrame(data)
     df.to_csv("result.csv")
     print(df)
+def detokenizer(matrix, tokenizer):
+    return [word.replace(" ", "") for word in  tokenizer.sequences_to_texts(matrix)]
 
 
 def tensor_to_2d_and_round(n):
@@ -249,45 +234,62 @@ def main():
     label_name = "Key"
     features, labels = load_data(filename, feature_names, label_name)
 
-    feature_tokenizer = Tokenizer(char_level = True)
+    feature_tokenizer = Tokenizer(char_level=True)
     feature_tokenizer.fit_on_texts(features)
-    # label_tokenizer = Tokenizer(char_level = True)
-    # label_tokenizer.fit_on_texts(labels)
 
-    label_tokenizer = feature_tokenizer
+    label_tokenizer = Tokenizer(char_level=True)
+    label_tokenizer.fit_on_texts(labels)
 
-
-    feature_padded = tokenize_normalize(feature_tokenizer, MAX_DECRYPT_SEQUENCES_LEN, features)[1]
+    # Tokenize and pad each separately
+    features_padded = tokenize_normalize(feature_tokenizer, MAX_DECRYPT_SEQUENCES_LEN, features)[1]
     labels_padded = tokenize_normalize(label_tokenizer, MAX_KEY_SEQUENCES_LEN, labels)[1]
 
 
-    one_hot_depth = np.max(feature_padded) + 1
+    # one_hot_depth = np.max(feature_padded) + 1
 
-    features_one_hot = one_hot_encode(feature_padded, one_hot_depth)
-    labels_one_hot = one_hot_encode(labels_padded, one_hot_depth)
-
-    # Ahead labels_one_hot on timesteps
+    # features_one_hot = one_hot_encode(feature_padded, one_hot_depth)
+    # labels_one_hot = one_hot_encode(labels_padded, one_hot_depth)
 
 
-    # print(features_one_hot.shape)
-    # print(labels_one_hot.shape)
 
-    # feature_padded = tensor_dim_normalize(feature_padded)
-    # labels_padded = tensor_dim_normalize(labels_padded)
-    X_train, X_test, y_train, y_test = train_test_split(features_one_hot, labels_one_hot, test_size=0.2, random_state=42)
 
+    # Use ascii alphabert => About 26 character for encode in vectorizer
+    encrypt_vocab_size = len(feature_tokenizer.word_index) + 4
+    key_vocab_size = len(label_tokenizer.word_index) + 4
+
+
+
+    # How freq they could be
+
+
+
+    # X_train, X_test, y_train, y_test = train_test_split(features_one_hot, labels_one_hot, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(features_padded, labels_padded, test_size=0.2, random_state=42)
 
     # X_train, X_test, y_train, y_test = train_test_split(feature_padded, labels_padded , test_size=0.1, random_state=42)
 
     # model = rnn_machine_translate_model( src_seq_len = MAX_DECRYPT_SEQUENCES_LEN, tar_seq_len = MAX_KEY_SEQUENCES_LEN, n_units = LSTM_N_UNITS, n_features = one_hot_depth)
-    model = rnn_machine_translate_model( src_seq_len = MAX_DECRYPT_SEQUENCES_LEN, tar_seq_len = MAX_KEY_SEQUENCES_LEN, n_units = LSTM_N_UNITS, n_features = MAX_DECRYPT_SEQUENCES_LEN)
+    model = rnn_machine_translate_model( input_vocab = encrypt_vocab_size, output_vocab = key_vocab_size, input_timesteps= MAX_DECRYPT_SEQUENCES_LEN, output_timesteps= MAX_KEY_SEQUENCES_LEN  ,n_units = LSTM_N_UNITS, n_features = 1)
 
+    save_model_file = "translate.keras"
+    checkpoint = ModelCheckpoint(save_model_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
-    decoder_output = decoder_off_set(y_train, 1)
-    model.fit([X_train, y_train], decoder_output, epochs=EPORCHS, batch_size=8, validation_data=(X_test, y_test), verbose=2)
+    history = model.fit(X_train, y_train.reshape(y_train.shape[0], y_train.shape[1], 1),
+          epochs=30, batch_size=LSTM_N_UNITS,
+          validation_split = 0.2,
+          callbacks=[checkpoint], verbose=1)
 
-    model.save('s2s.h5')
+    # decoder_output = decoder_off_set(y_train, 1)
+    # model.fit(X_train, y_train, epochs=EPORCHS, batch_size=64,  verbose=2)
+
+    # model.save('s2s.h5')
     # train_test(model, X_train, y_train , X_test, 	y_test, epochs = EPORCHS)
+
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.legend(['train','validation'])
+    plt.show()
+
 
     evaluate(model, X_test, y_test, label_tokenizer)
 
