@@ -1,3 +1,4 @@
 env**/
 __pycache__/
 src/s2s.h5
+src/translate.keras

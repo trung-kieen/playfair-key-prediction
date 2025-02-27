@@ -4,7 +4,8 @@ import nltk
 nltk.download('words')
 from nltk.corpus import words
 
-NUM_PLAINTEXTS = 30000
+NUM_PLAINTEXTS = 10000
+KEY_AMOUNT = 6
 def create_matrix(key):
     """
     Create 5x5 matrix from key
@@ -110,15 +111,23 @@ def generate_plaintexts(num_plaintexts):
     Generate plain text sample
     """
     # plaintexts = []
+
+    word_set = words.words()
+    random.shuffle(word_set)
+    word_set_len = len(word_set)
+    counter = 0
     for _ in range(num_plaintexts):
-        plaintext = random.choice(words.words())
+        plaintext = ""
+        for i in range(random.randint(4,6)):
+            counter += 1
+            plaintext += word_set[counter %  word_set_len]
         yield plaintext
         # plaintexts.append(plaintext)
     # return plaintexts
 
 
 
-def generate_keys(thres_hold = 10):
+def generate_keys(thres_hold = KEY_AMOUNT):
     """
     Generate plain text sample
     """
@@ -131,17 +140,18 @@ if __name__ == '__main__':
     plaintexts = generate_plaintexts(NUM_PLAINTEXTS)
     keys  = list(generate_keys())
     # key = 'SECRET'
-    data = {'Plain Text': [], 'Key':[], 'Cipher Text': [], 'Decrypted Text': []}
+    data = {'Plain Text': [], 'Key':[],  'Encrypted Text': []}
+    max_char_len = 0
 
     for i, plaintext in enumerate(plaintexts):
         key = random.choice(keys)
-        ciphertext = playfair(key, plaintext)
-        decrypted_text = playfair(key, ciphertext, encrypt=False)
+        encrypted_text = playfair(key, plaintext)
         data['Plain Text'].append(plaintext)
         data['Key'].append(key)
-        data['Cipher Text'].append(ciphertext)
-        data['Decrypted Text'].append(decrypted_text)
-        print(plaintext)
+        data['Encrypted Text'].append(encrypted_text)
+        max_char_len = max(max_char_len, len(encrypted_text))
+        print(plaintext,  " => " , encrypted_text)
     df = pd.DataFrame(data)
+    print("Max character len of encrypted text ", max_char_len)
     # df.to_excel('PLAYFAIR_CIPHER_DATASET.xlsx', index=False)
     df.to_excel(f'PLAYFAIR_CIPHER_DATASET_RANDOM_KEY_{NUM_PLAINTEXTS}.xlsx', index=False)
