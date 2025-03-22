@@ -33,17 +33,20 @@ fitting	SECRET	BLCZEMUA	FITTING
 
 
 EPORCHS = 10
-LSTM_N_UNITS = 64
-SIZE = 10000
-TRAIN_SIZE = 10000 * 0.8
-TEST_SIZE = 10000 * 0.2
+LSTM_N_UNITS = 128
+SIZE = 1000
+TRAIN_SIZE = SIZE * 0.8
+TEST_SIZE = SIZE * 0.2
 
 
 # Maximize number of token in each vector
 # => Convention fix in 40 character for input and 8 character for key
-MAX_DECRYPT_SEQUENCES_LEN = 100 # Number of word, character to decrypt word
-MAX_KEY_SEQUENCES_LEN = 8
+MAX_DECRYPT_SEQUENCES_LEN = 1930 # Number of word, character to decrypt word
+MAX_KEY_SEQUENCES_LEN = 10
 
+filename = "PLAYFAIR_CIPHER_DATASET_RANDOM_KEY_1000.xlsx"
+feature_names= "Encrypted Text"
+label_name = "Key"
 
 def load_data(filename , feature_cols, label_col: str):
     df = pd.read_excel(filename)
@@ -234,9 +237,6 @@ def max_token_value(matrix):
 
 
 def main():
-    filename = "PLAYFAIR_CIPHER_DATASET_RANDOM_KEY_10000.xlsx"
-    feature_names= "Encrypted Text"
-    label_name = "Key"
     features, labels = load_data(filename, feature_names, label_name)
 
     feature_tokenizer = Tokenizer(char_level=True)

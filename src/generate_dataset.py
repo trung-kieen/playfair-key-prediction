@@ -1,11 +1,16 @@
+from itertools import count
 import random
 import pandas as pd
 import nltk
 nltk.download('words')
 from nltk.corpus import words
 
-NUM_PLAINTEXTS = 10000
-KEY_AMOUNT = 6
+NUM_PLAINTEXTS = 1000
+KEY_AMOUNT = 100
+
+
+# The length of cirpher text must large enough to learn the encrypt structure
+CHARSET_THRESHOLD = 625 * 3
 def create_matrix(key):
     """
     Create 5x5 matrix from key
@@ -118,9 +123,12 @@ def generate_plaintexts(num_plaintexts):
     counter = 0
     for _ in range(num_plaintexts):
         plaintext = ""
-        for i in range(random.randint(4,6)):
-            counter += 1
+        while len(plaintext) < CHARSET_THRESHOLD:
             plaintext += word_set[counter %  word_set_len]
+            if counter == word_set_len - 1:
+                random.shuffle(word_set)
+                counter = 0
+            counter += 1
         yield plaintext
         # plaintexts.append(plaintext)
     # return plaintexts
@@ -131,10 +139,15 @@ def generate_keys(thres_hold = KEY_AMOUNT):
     """
     Generate plain text sample
     """
-    for _ in range(thres_hold):
-        word = random.choice(words.words())
-        if len(word) > 5:
-            yield word[:5].upper()
+    word_set = words.words()
+
+    word_set_len = len(word_set)
+    random.shuffle(word_set)
+    for i in range(thres_hold):
+        word = word_set[i %  word_set_len]
+        if i == word_set_len - 1:
+            random.shuffle(word_set)
+        yield word[:10].upper()
 
 if __name__ == '__main__':
     plaintexts = generate_plaintexts(NUM_PLAINTEXTS)
